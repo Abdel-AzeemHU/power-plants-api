@@ -37,13 +37,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: power-plants-app/yarn.lock
 
       - name: Setup Yarn
         run: |
           npm install -g yarn
           yarn --version
+
+      - name: Cache Node modules for Power Plants App
+        uses: actions/cache@v4
+        with:
+          path: power-plants-app/node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('power-plants-app/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -55,6 +61,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y make
+
+      - name: Install Power Plants App Dependencies
+        working-directory: power-plants-app
+        run: |
+          yarn install --frozen-lockfile
 
       - name: Start Power Plants API
         working-directory: power-plants-app
@@ -88,7 +99,7 @@ jobs:
         working-directory: api-tests
         run: |
           mvn clean install -DskipTests
-        
+
       - name: Run API Tests
         working-directory: api-tests
         run: |
