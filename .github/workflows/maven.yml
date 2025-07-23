@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout API project (us-power-plants-js)
+      # 1. Checkout API project first
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
@@ -23,19 +23,19 @@ jobs:
           path: us-power-plants
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Checkout Test project (power-plants-api)
-      - name: Checkout Test code
-        uses: actions/checkout@v4
-        with:
-          path: power-plants-api
-
-      # 3. Setup Node.js for API project
+      # 2. Setup Node.js with caching AFTER checkout
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'yarn'
-          cache-dependency-path: 'us-power-plants/yarn.lock'  # Point to correct lock file
+          cache-dependency-path: 'us-power-plants/yarn.lock'
+
+      # 3. Checkout Test project
+      - name: Checkout Test code
+        uses: actions/checkout@v4
+        with:
+          path: power-plants-api
 
       # 4. Install API dependencies
       - name: Install API dependencies
@@ -45,32 +45,31 @@ jobs:
           yarn install --frozen-lockfile
           yarn add nodemon ts-node --dev
 
-      # 5. Start API (using direct yarn command)
+      # 5. Start API
       - name: Start API
         working-directory: ./us-power-plants
         run: |
           nohup yarn nodemon app.ts > api.log 2>&1 &
           echo $! > api.pid
           
-          echo "Waiting for API to start..."
-          timeout=60
-          while [ $timeout -gt 0 ]; do
+          echo "Waiting for API startup..."
+          for i in {1..30}; do
             if curl -f http://localhost:${{ env.API_PORT }}/api-docs && 
                grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
-              echo "API started successfully!"
+              echo "API ready!"
               break
             fi
             sleep 2
-            timeout=$((timeout-2))
+            echo "Waiting... ($i/30)"
           done
           
-          if [ $timeout -le 0 ]; then
+          if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
             echo "API failed to start. Logs:"
             cat api.log
             exit 1
           fi
 
-      # 6. Setup Java for tests (if needed)
+      # 6. Setup Java for tests
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -92,4 +91,4 @@ jobs:
             kill -9 $(cat api.pid) || true
             rm api.pid
           fi
-          pkill -f "nodemon app.ts" || true
+          pkill -f "[n]odemon app.ts" || true
