@@ -15,7 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout API project first
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
@@ -23,21 +27,18 @@ jobs:
           path: us-power-plants
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Setup Node.js with caching AFTER checkout
-      - name: Setup Node.js
+      - name: Enable Yarn cache
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'yarn'
-          cache-dependency-path: 'us-power-plants/yarn.lock'
+          cache-dependency-path: us-power-plants/yarn.lock
 
-      # 3. Checkout Test project
       - name: Checkout Test code
         uses: actions/checkout@v4
         with:
           path: power-plants-api
 
-      # 4. Install API dependencies
       - name: Install API dependencies
         working-directory: ./us-power-plants
         run: |
@@ -45,7 +46,6 @@ jobs:
           yarn install --frozen-lockfile
           yarn add nodemon ts-node --dev
 
-      # 5. Start API
       - name: Start API
         working-directory: ./us-power-plants
         run: |
@@ -69,20 +69,17 @@ jobs:
             exit 1
           fi
 
-      # 6. Setup Java for tests
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Run API tests
       - name: Run tests
         working-directory: ./power-plants-api
         run: |
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      # 8. Cleanup
       - name: Stop API
         if: always()
         working-directory: ./us-power-plants
