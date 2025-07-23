@@ -15,11 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
+      # 1. Checkout API repo
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
@@ -27,59 +23,75 @@ jobs:
           path: us-power-plants
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable Yarn cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: us-power-plants/yarn.lock
-
-      - name: Checkout Test code
+      # 2. Checkout test project (current repo)
+      - name: Checkout test code
         uses: actions/checkout@v4
         with:
           path: power-plants-api
 
+      # 3. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 4. Install Yarn globally
+      - name: Install Yarn
+        run: npm install -g yarn@1.22.22
+
+      # 5. Install API dependencies
       - name: Install API dependencies
         working-directory: ./us-power-plants
         run: |
-          npm install -g yarn@1.22.22
           yarn install --frozen-lockfile
           yarn add nodemon ts-node --dev
 
+      # 6. Start the API
       - name: Start API
         working-directory: ./us-power-plants
         run: |
           nohup yarn nodemon app.ts > api.log 2>&1 &
           echo $! > api.pid
-          
-          echo "Waiting for API startup..."
+
+          echo "Waiting for API to start..."
           for i in {1..30}; do
-            if curl -f http://localhost:${{ env.API_PORT }}/api-docs && 
+            if curl -f http://localhost:${{ env.API_PORT }}/api-docs && \
                grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
-              echo "API ready!"
+              echo "API is up!"
               break
             fi
             sleep 2
             echo "Waiting... ($i/30)"
           done
-          
+
           if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
-            echo "API failed to start. Logs:"
+            echo "API failed to start. Here's the log:"
             cat api.log
             exit 1
           fi
 
+      # 7. Setup Java for API tests
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Run tests
+      # 8. Run the Java API tests
+      - name: Run API tests
         working-directory: ./power-plants-api
         run: |
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
+      # 9. Upload API log on failure (optional)
+      - name: Upload API logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-logs
+          path: ./us-power-plants/api.log
+
+      # 10. Stop the API
       - name: Stop API
         if: always()
         working-directory: ./us-power-plants
