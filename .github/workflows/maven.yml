@@ -44,22 +44,19 @@ jobs:
           make api-start > api.log 2>&1 &
           echo $! > api.pid
 
-          echo "Waiting for API to start..."
-          for i in {1..30}; do
-            if curl -f http://localhost:${{ env.API_PORT }}/api-docs && \
-               grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
+      - name: Wait for API to be ready
+        run: |
+          for i in {1..15}; do
+            if curl -s -f http://localhost:${{ env.API_PORT }}/api-docs/ > /dev/null; then
               echo "API is up!"
-              break
+              exit 0
             fi
+            echo "Waiting for API to start... ($i/15)"
             sleep 2
-            echo "Waiting... ($i/30)"
           done
-
-          if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
-            echo "API failed to start. Here's the log:"
-            cat api.log
-            exit 1
-          fi
+          echo "API did not start in time, printing logs:"
+          cat ./us-power-plants/api.log
+          exit 1
 
       - name: Setup Java
         uses: actions/setup-java@v4
