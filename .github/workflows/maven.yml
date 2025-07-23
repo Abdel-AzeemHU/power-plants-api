@@ -15,72 +15,96 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout the API project first (us-power-plants-js)
+      # This repository contains the Node.js API code.
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
           repository: Abdel-AzeemHU/us-power-plants-js
-          path: us-power-plants
+          path: us-power-plants # Checks out into a directory named 'us-power-plants'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout test code
-        uses: actions/checkout@v4
-        with:
-          path: power-plants-api
-
+      # 2. Setup Node.js with caching
+      # The cache-dependency-path is specified relative to the repository's root.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'yarn'
+          # The path to yarn.lock is relative to the runner's workspace root,
+          # where 'us-power-plants' is the directory created by the checkout action.
+          cache-dependency-path: 'us-power-plants/yarn.lock'
 
-      - name: Install Yarn
-        run: npm install -g yarn@1.22.22
+      # 3. Checkout the Test project (power-plants-api)
+      # This repository contains your workflow file and the Java tests.
+      - name: Checkout Test code
+        uses: actions/checkout@v4
+        with:
+          path: power-plants-api # Checks out into a directory named 'power-plants-api'
 
+      # 4. Install API dependencies
+      # Run yarn install within the API project directory.
       - name: Install API dependencies
         working-directory: ./us-power-plants
-        run: yarn install --frozen-lockfile
+        run: |
+          npm install -g yarn@1.22.22 # Ensure yarn is available
+          yarn install --frozen-lockfile
+          yarn add nodemon ts-node --dev
 
-      - name: Start API using make
+      # 5. Start the API in the background
+      # This step starts the Node.js API and waits for it to be ready.
+      - name: Start API
         working-directory: ./us-power-plants
         run: |
-          make api-start > api.log 2>&1 &
+          # Start nodemon in the background, redirecting output to api.log
+          nohup yarn nodemon app.ts > api.log 2>&1 &
+          # Store the process ID for later cleanup
           echo $! > api.pid
-
-      - name: Wait for API to be ready
-        run: |
-          for i in {1..15}; do
-            if curl -s -f http://localhost:${{ env.API_PORT }}/api-docs/ > /dev/null; then
-              echo "API is up!"
-              exit 0
+          
+          echo "Waiting for API startup..."
+          # Loop to check if the API is up and running
+          for i in {1..30}; do
+            # Check if the API docs endpoint is reachable and if the log indicates it's running
+            if curl -f http://localhost:${{ env.API_PORT }}/api-docs && \
+               grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
+              echo "API ready!"
+              break
             fi
-            echo "Waiting for API to start... ($i/15)"
             sleep 2
+            echo "Waiting... ($i/30)"
           done
-          echo "API did not start in time, printing logs:"
-          cat ./us-power-plants/api.log
-          exit 1
+          
+          # Final check: if API is not up, print logs and exit with error
+          if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
+            echo "API failed to start. Logs:"
+            cat api.log
+            exit 1
+          fi
 
+      # 6. Setup Java for tests
+      # This is required for running your Maven-based API tests.
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Run API tests
+      # 7. Run API tests
+      # Navigate to the test project directory and execute Maven tests.
+      - name: Run tests
         working-directory: ./power-plants-api
-        run: mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+        run: |
+          mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      - name: Upload API logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-logs
-          path: ./us-power-plants/api.log
-
+      # 8. Cleanup: Stop the API process
+      # This step ensures the API process is terminated, even if tests fail.
       - name: Stop API
-        if: always()
+        if: always() # Always run this step
         working-directory: ./us-power-plants
         run: |
           if [ -f api.pid ]; then
-            kill -9 $(cat api.pid) || true
+            kill -9 $(cat api.pid) || true # Kill by PID if file exists
             rm api.pid
           fi
-          pkill -f "[n]odemon" || true
+          # Fallback to kill any remaining nodemon processes
+          pkill -f "[n]odemon app.ts" || true
