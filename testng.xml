@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd">
+<suite name="All Test Suite">
+    <listeners>
+        <listener class-name="com.AIQ.listeners.TestListener" />
+    </listeners>
+    <test verbose="2" preserve-order="true" name="Power Plants API">
+        <classes>
+            <class name="com.AIQ.tests.GetSearchAPITest"/>
+            <class name="com.AIQ.tests.GetSearchStatePercentageAPITest"/>
+            <class name="com.AIQ.tests.GetSearchTopAPITest"/>
+            <class name="com.AIQ.tests.GetStateByStateCodeAPITest"/>
+            <class name="com.AIQ.tests.GetStatesListAPITest"/>
+        </classes>
+    </test>
+</suite>

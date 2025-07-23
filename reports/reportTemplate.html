@@ -1,0 +1,169 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Plants API Regression Test Suite</title>
+    <!-- Add Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Apply Roboto font to the entire document */
+        body {
+            font-family: 'Roboto', Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        /* Ensure tables and other elements inherit the font */
+        table, td, th, h1, h2, p, a {
+            font-family: 'Roboto', Arial, Helvetica, sans-serif;
+        }
+    </style>
+    <!--[if mso]>
+    <style>
+        /* Outlook-specific styles */
+        .outlook-fix {
+            padding: 10px !important;
+        }
+    </style>
+    <![endif]-->
+</head>
+<body>
+<!-- Header -->
+<table align="center" width="100%" style="max-width: 1200px;">
+    <tr>
+        <td style="background-color: #413839; color: white; text-align: center; padding: 20px;">
+            <h1 style="font-size: 24px; font-weight: bold;">Fodel API Regression Test Report</h1>
+        </td>
+    </tr>
+</table>
+
+<!-- Main Content -->
+<table align="center" width="100%" style="max-width: 1200px; padding: 20px 0;">
+    <tr>
+        <td>
+            <!-- Summary Card -->
+            <table width="100%" style="background: white; padding: 20px; margin-bottom: 20px;">
+                <tr>
+                    <td>
+                        <p style="font-size: 18px; margin-bottom: 15px;">Dear Team,</p>
+                        <p style="font-size: 18px; margin-bottom: 15px;">Please find below the results of the latest test automation suite execution:</p>
+                        <p style="font-size: 18px; margin-bottom: 15px;">
+                            <strong>Allure Report:</strong>
+                            <a href="{{ALLURE_REPORT_URL}}" target="_blank" style="color: #2563eb; text-decoration: none;">Check the Allure Report details</a>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Progress Card -->
+            <table width="100%" style="background: white; padding: 20px; margin-bottom: 20px;">
+                <tr>
+                    <td>
+                        <h2 style="font-size: 22px; font-weight: 600; color: #1f2937; text-align: center;">Test Pass Rate: {{PASS_RATE}}%</h2>
+                        <table width="100%" style="background-color: #e5e7eb; height: 12px; margin: 15px 0;">
+                            <tr>
+                                <td width="{{PASS_RATE}}%" style="background-color: #22c55e;"></td> <!-- Passed -->
+                                <td width="{{FAIL_RATE}}%" style="background-color: #dc2626;"></td> <!-- Failed -->
+                                <td width="{{SKIP_RATE}}%" style="background-color: #ca8a04;"></td> <!-- Skipped -->
+                            </tr>
+                        </table>
+                        <table width="100%" style="text-align: center;">
+                            <tr>
+                                <td width="30%" style="background-color: #f0fdf4; padding: 15px;">
+
+                                    <div style="font-size: 20px; font-weight: bold; color: #16a34a;">{{PASSED}}</div>
+                                    <div style="color: #4b5563;">Passed</div>
+                                </td>
+                                <td width="30%" style="background-color: #fef2f2; padding: 15px;">
+                                    <div style="font-size: 20px; font-weight: bold; color: #dc2626;">{{FAILED}}</div>
+                                    <div style="color: #4b5563;">Failed</div>
+                                </td>
+                                <td width="30%" style="background-color: #fefce8; padding: 15px;">
+                                    <div style="font-size: 20px; font-weight: bold; color: #ca8a04;">{{SKIPPED}}</div>
+                                    <div style="color: #4b5563;">Skipped</div>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Execution Details and Detailed Results Cards -->
+            <table width="100%" style="border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <!-- Execution Details Card -->
+                    <td width="48%" style="vertical-align: top;">
+                        <table width="100%" style="background: white; padding: 20px;">
+                            <tr>
+                                <td>
+                                    <h2 style="font-size: 18px; font-weight: 600; color: #1f2937; margin-bottom: 15px;">Execution Details</h2>
+                                    <table width="100%" style="border-collapse: collapse;">
+                                        <tr style="background-color: #f3f4f6;">
+                                            <td style="padding: 10px; font-weight: bold;">Test Suite:</td>
+                                            <td style="padding: 10px; text-align: left;">{{TEST_SUITE}}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 10px; font-weight: bold;">Execution Date:</td>
+                                            <td style="padding: 10px; text-align: left;">{{EXECUTION_DATE}}</td>
+                                        </tr>
+                                        <tr style="background-color: #f3f4f6;">
+                                            <td style="padding: 10px; font-weight: bold;">Executed By:</td>
+                                            <td style="padding: 10px; text-align: left;">Automated CI/CD Pipeline</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 10px; font-weight: bold;">Environment:</td>
+                                            <td style="padding: 10px; text-align: left;">Staging</td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+
+                    <!-- Spacer -->
+                    <td width="4%"></td>
+
+                    <!-- Detailed Results Card -->
+                    <td width="48%" style="vertical-align: top;">
+                        <table width="100%" style="background: white; padding: 20px;">
+                            <tr>
+                                <td>
+                                    <h2 style="font-size: 18px; font-weight: 600; color: #1f2937; margin-bottom: 15px;">Detailed Results</h2>
+                                    <table width="100%" style="border-collapse: collapse;">
+                                        <tr style="background-color: #f3f4f6;">
+                                            <td style="padding: 10px; font-weight: bold;">Total Tests</td>
+                                            <td style="padding: 10px; text-align: left;">{{TOTAL_TESTS}}</td>
+                                        </tr>
+                                        <tr style="background-color: #f0fdf4;">
+                                            <td style="padding: 10px; font-weight: bold;">Passed</td>
+                                            <td style="padding: 10px; text-align: left;">{{PASSED}}</td>
+                                        </tr>
+                                        <tr style="background-color: #fef2f2;">
+                                            <td style="padding: 10px; font-weight: bold;">Failed</td>
+                                            <td style="padding: 10px; text-align: left;">{{FAILED}}</td>
+                                        </tr>
+                                        <tr style="background-color: #fefce8;">
+                                            <td style="padding: 10px; font-weight: bold;">Skipped</td>
+                                            <td style="padding: 10px; text-align: left;">{{SKIPPED}}</td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+
+<!-- Footer -->
+<table align="center" width="100%" style="max-width: 1200px;">
+    <tr>
+        <td style="background-color: #413839; color: white; text-align: center; padding: 20px;">
+            <p style="font-size: 18px; font-weight: bold;">© 2025 7X. All rights reserved.</p>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

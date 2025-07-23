@@ -1,0 +1,13 @@
+com/emiratespost/api/RestResource.class
+com/emiratespost/utils/ConfigLoader.class
+com/emiratespost/tests/BaseTest.class
+com/emiratespost/utils/DataLoader.class
+com/emiratespost/api/SpecBuilder.class
+com/emiratespost/utils/PropertyUtils.class
+com/emiratespost/tests/RestfulBookerTest.class
+com/emiratespost/utils/FakerUtils.class
+com/emiratespost/pojo/Auth.class
+com/emiratespost/api/StatusCode.class
+com/emiratespost/pojo/Auth$AuthBuilder.class
+com/emiratespost/api/Route.class
+com/emiratespost/api/epFleetCourierAPI/RestfulBookerAPIs.class
