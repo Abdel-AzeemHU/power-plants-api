@@ -15,31 +15,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout API project
+      # 1. Checkout API project (us-power-plants-js)
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
           repository: Abdel-AzeemHU/us-power-plants-js
-          path: api-project
+          path: us-power-plants-js
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Setup Node.js for API
-      - name: Setup Node for API
+      # 2. Checkout Test project (power-plants-api)
+      - name: Checkout Test code
+        uses: actions/checkout@v4
+        with:
+          path: power-plants-api
+
+      # 3. Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          working-directory: ./api-project
 
-      # 3. Install API dependencies
+      # 4. Install API dependencies
       - name: Install API dependencies
-        working-directory: ./api-project
+        working-directory: ./us-power-plants-js
         run: |
           npm install -g yarn
           yarn install --frozen-lockfile
 
-      # 4. Start the API
+      # 5. Start the API (from root of us-power-plants-js)
       - name: Start API
-        working-directory: ./api-project/opt/api  # Adjust to your API directory
+        working-directory: ./us-power-plants-js
         run: |
           make api-start > api.log 2>&1 &
           echo $! > api.pid
@@ -62,32 +67,24 @@ jobs:
             exit 1
           fi
 
-      # 5. Checkout Test project
-      - name: Checkout Test code
-        uses: actions/checkout@v4
-        with:
-          path: test-project
-
-      # 6. Setup Test environment (Java/Maven if needed)
+      # 6. Setup Java for tests (if needed)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Run your API tests
+      # 7. Run API tests
       - name: Run tests
-        working-directory: ./test-project
+        working-directory: ./power-plants-api
         run: |
-          # Example: mvn test
-          # Or your actual test command
-          echo "Running tests against http://localhost:${{ env.API_PORT }}"
+          # Example test command - replace with your actual command
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
       # 8. Cleanup (always runs)
       - name: Stop API
         if: always()
-        working-directory: ./api-project/opt/api  # Same as Start API step
+        working-directory: ./us-power-plants-js
         run: |
           if [ -f api.pid ]; then
             kill -9 $(cat api.pid) || true
