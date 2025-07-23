@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout API project
+      # 1. Checkout API project (us-power-plants-js)
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
@@ -23,43 +23,41 @@ jobs:
           path: us-power-plants
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Checkout Test project
+      # 2. Checkout Test project (power-plants-api)
       - name: Checkout Test code
         uses: actions/checkout@v4
         with:
           path: power-plants-api
 
-      # 3. Setup Node.js (exact match for local)
+      # 3. Setup Node.js for API project
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'  # Match your local version
+          node-version: '18'
           cache: 'yarn'
+          cache-dependency-path: 'us-power-plants/yarn.lock'  # Point to correct lock file
 
-      # 4. Install exact dependencies (like local)
-      - name: Install dependencies
+      # 4. Install API dependencies
+      - name: Install API dependencies
         working-directory: ./us-power-plants
         run: |
-          npm install -g yarn@1.22.22  # Your exact yarn version
+          npm install -g yarn@1.22.22
           yarn install --frozen-lockfile
-          yarn add nodemon ts-node --dev  # Ensure these are present
+          yarn add nodemon ts-node --dev
 
-      # 5. Start API exactly like local
+      # 5. Start API (using direct yarn command)
       - name: Start API
         working-directory: ./us-power-plants
         run: |
-          # Start API with same command as local
           nohup yarn nodemon app.ts > api.log 2>&1 &
           echo $! > api.pid
           
-          # Health check with exact same output
-          echo "Waiting for API to start (like local environment)..."
+          echo "Waiting for API to start..."
           timeout=60
           while [ $timeout -gt 0 ]; do
             if curl -f http://localhost:${{ env.API_PORT }}/api-docs && 
                grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
-              echo "{ message: 'server running on 0.0.0.0:${{ env.API_PORT }}', level: 'info' }"
-              echo "UP and running on 0.0.0.0:${{ env.API_PORT }}."
+              echo "API started successfully!"
               break
             fi
             sleep 2
@@ -67,19 +65,25 @@ jobs:
           done
           
           if [ $timeout -le 0 ]; then
-            echo "API failed to start (checking logs)..."
+            echo "API failed to start. Logs:"
             cat api.log
             exit 1
           fi
 
-      # 6. Run tests from test repo
-      - name: Run API tests
+      # 6. Setup Java for tests (if needed)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 7. Run API tests
+      - name: Run tests
         working-directory: ./power-plants-api
         run: |
-          # Replace with your actual test command
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      # 7. Cleanup (matches local process stop)
+      # 8. Cleanup
       - name: Stop API
         if: always()
         working-directory: ./us-power-plants
@@ -88,5 +92,4 @@ jobs:
             kill -9 $(cat api.pid) || true
             rm api.pid
           fi
-          # Also kill any nodemon processes
           pkill -f "nodemon app.ts" || true
