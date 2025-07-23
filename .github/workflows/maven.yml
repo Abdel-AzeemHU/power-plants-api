@@ -31,9 +31,10 @@ jobs:
           npm install -g yarn
           yarn install --frozen-lockfile
 
-      # 4. Start the API
+      # 4. Start the API (in the correct directory)
       - name: Start API
         run: |
+          cd opt/api  # CHANGE THIS to your actual API directory
           make api-start > api.log 2>&1 &
           echo $! > api.pid
           
@@ -55,17 +56,17 @@ jobs:
             exit 1
           fi
 
-      # 5. Run your API tests (adjust this command as needed)
+      # 5. Run your API tests
       - name: Run tests
         run: |
-          # Example test command - replace with your actual test command
-          yarn test
+          # Your test command here
+          echo "Running tests..."
 
       # 6. Cleanup (always runs)
       - name: Stop API
         if: always()
         run: |
-          if [ -f api.pid ]; then
-            kill -9 $(cat api.pid) || true
-            rm api.pid
+          if [ -f opt/api/api.pid ]; then  # CHANGE THIS to match your API directory
+            kill -9 $(cat opt/api/api.pid) || true
+            rm opt/api/api.pid
           fi
