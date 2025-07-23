@@ -70,8 +70,17 @@ jobs:
       - name: Start Power Plants API
         working-directory: power-plants-app
         run: |
+          # Check if nodemon is available
+          echo "Checking nodemon availability:"
+          which nodemon || echo "nodemon not found in PATH"
+          
+          # Check what's in the Makefile
+          echo "Contents of Makefile:"
+          cat Makefile | head -20
+          
           # Start the API in the background using Makefile
-          make api-start &
+          echo "Starting API with make api-start..."
+          make api-start > api.log 2>&1 &
           
           # Store the PID for cleanup later
           echo $! > api.pid
@@ -91,6 +100,10 @@ jobs:
           
           if [ $timeout -le 0 ]; then
             echo "API failed to start within timeout"
+            echo "API logs:"
+            cat api.log || echo "No api.log file found"
+            echo "Process list:"
+            ps aux | grep -E "(node|yarn|make)" || true
             cat api.pid | xargs kill -9 2>/dev/null || true
             exit 1
           fi
