@@ -1,0 +1,213 @@
+name: API Automation Test Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Allows manual trigger
+
+env:
+  ALLURE_RESULTS_DIR: 'allure-results'
+  ALLURE_REPORT_DIR: 'allure-report'
+  TEST_SUITE: 'Power Plants API Regression Test Suite'
+  ENVIRONMENT: 'Testing'
+  TESTER: 'Abdelazeem Hussein'
+  NODE_VERSION: '18'
+  JAVA_VERSION: '17'
+
+jobs:
+  api-automation-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout API Test Repository
+        uses: actions/checkout@v4
+        with:
+          path: api-tests
+
+      - name: Checkout Power Plants Application
+        uses: actions/checkout@v4
+        with:
+          repository: Abdel-AzeemHU/us-power-plants-js
+          path: power-plants-app
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: power-plants-app/yarn.lock
+
+      - name: Setup Yarn
+        run: |
+          npm install -g yarn
+          yarn --version
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Make (if not available)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make
+
+      - name: Start Power Plants API
+        working-directory: power-plants-app
+        run: |
+          # Start the API in the background using Makefile
+          make api-start &
+          
+          # Store the PID for cleanup later
+          echo $! > api.pid
+          
+          # Wait for the API to be ready
+          echo "Waiting for API to start..."
+          timeout=60
+          while [ $timeout -gt 0 ]; do
+            if curl -f http://localhost:9000/api-docs 2>/dev/null; then
+              echo "API is ready!"
+              break
+            fi
+            echo "API not ready yet, waiting..."
+            sleep 2
+            timeout=$((timeout-2))
+          done
+          
+          if [ $timeout -le 0 ]; then
+            echo "API failed to start within timeout"
+            cat api.pid | xargs kill -9 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Build Maven Test Project
+        working-directory: api-tests
+        run: |
+          mvn clean install -DskipTests
+        
+      - name: Run API Tests
+        working-directory: api-tests
+        run: |
+          # Start timing
+          start_time=$(date +%s)
+          
+          # Run tests
+          mvn clean test -Dsurefire.suiteXmlFiles=testng.xml \
+            -Dallure.results.directory=${{ env.ALLURE_RESULTS_DIR }}
+          
+          # Calculate duration
+          end_time=$(date +%s)
+          duration=$((end_time - start_time))
+          hours=$((duration / 3600))
+          minutes=$(((duration % 3600) / 60))
+          seconds=$((duration % 60))
+          formatted_duration=$(printf '%02dh:%02dm:%02ds' $hours $minutes $seconds)
+          
+          # Create reports directory and summary
+          mkdir -p reports
+          echo "duration=$formatted_duration" >> reports/test_summary.txt
+          echo "environment=${{ env.ENVIRONMENT }}" >> reports/test_summary.txt
+          echo "tester=${{ env.TESTER }}" >> reports/test_summary.txt
+          echo "timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> reports/test_summary.txt
+          
+          echo "TEST_DURATION=$formatted_duration" >> $GITHUB_ENV
+
+      - name: Generate Allure Report
+        working-directory: api-tests
+        if: always()
+        run: |
+          # Download and setup Allure
+          curl -o allure-2.30.0.tgz -Ls https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
+          tar -zxvf allure-2.30.0.tgz
+          sudo mv allure-2.30.0 /opt/allure
+          sudo ln -s /opt/allure/bin/allure /usr/bin/allure
+          
+          # Generate report
+          allure generate ${{ env.ALLURE_RESULTS_DIR }} -o ${{ env.ALLURE_REPORT_DIR }} --clean
+
+      - name: Upload Allure Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-report
+          path: api-tests/${{ env.ALLURE_REPORT_DIR }}
+          retention-days: 30
+
+      - name: Upload Extent Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extent-report
+          path: api-tests/Extent.html
+          retention-days: 30
+
+      - name: Upload Test Summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-summary
+          path: api-tests/reports/test_summary.txt
+          retention-days: 30
+
+      - name: Generate Final Report
+        working-directory: api-tests
+        if: always()
+        run: |
+          # Make script executable if it exists
+          if [ -f "generate_report.sh" ]; then
+            chmod +x ./generate_report.sh
+            ./generate_report.sh "${{ env.TEST_SUITE }}" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          else
+            echo "generate_report.sh not found, skipping final report generation"
+          fi
+
+      - name: Upload Final Report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('api-tests/reports/final_report.html') != ''
+        with:
+          name: final-report
+          path: api-tests/reports/final_report.html
+          retention-days: 30
+
+      - name: Comment Test Results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const testDuration = process.env.TEST_DURATION || 'Unknown';
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            
+            const comment = `## 🧪 API Test Results
+            
+            **Test Suite:** ${{ env.TEST_SUITE }}
+            **Duration:** ${testDuration}
+            **Environment:** ${{ env.ENVIRONMENT }}
+            **Tester:** ${{ env.TESTER }}
+            
+            📊 [View Full Report](${runUrl})
+            📋 [Download Artifacts](${runUrl})
+            
+            > Automated API tests completed for commit ${{ github.sha }}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Stop Power Plants API
+        if: always()
+        working-directory: power-plants-app
+        run: |
+          # Kill the API process using the stored PID
+          if [ -f api.pid ]; then
+            cat api.pid | xargs kill -9 2>/dev/null || true
+            rm api.pid
+          fi
+          # Also kill any remaining processes that might be related
+          pkill -f "make api-start" || true
