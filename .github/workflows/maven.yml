@@ -31,28 +31,40 @@ jobs:
           path: us-power-plants # Checks out into a directory named 'us-power-plants'
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. Setup Node.js with caching
-      # This step is now placed AFTER the API code checkout to ensure
-      # 'us-power-plants/yarn.lock' is available for caching.
+      # 3. Setup Node.js (without built-in caching, as we'll use actions/cache explicitly)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'yarn'
-          # The path to yarn.lock is relative to the runner's workspace root,
-          # where 'us-power-plants' is the directory created by the checkout action.
-          cache-dependency-path: 'us-power-plants/yarn.lock'
 
-      # 4. Install API dependencies
-      # Run yarn install within the API project directory.
+      # 4. Cache Node.js modules
+      # This step explicitly caches the 'node_modules' directory for the API project.
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+          path: us-power-plants/node_modules # Path to the node_modules directory
+          key: ${{ runner.os }}-yarn-${{ hashFiles('us-power-plants/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      # 5. Install API dependencies
+      # This step will now install dependencies. If a cache hit occurred in the previous step,
+      # yarn install will be very fast as modules are already present.
       - name: Install API dependencies
         working-directory: ./us-power-plants
         run: |
           npm install -g yarn@1.22.22 # Ensure yarn is available
           yarn install --frozen-lockfile
+
+      # 6. Install nodemon and ts-node (dev dependencies)
+      # Moved these to a separate step to ensure they are installed after core dependencies
+      # and potentially after cache restoration.
+      - name: Install Dev Dependencies (nodemon, ts-node)
+        working-directory: ./us-power-plants
+        run: |
           yarn add nodemon ts-node --dev
 
-      # 5. Start the API in the background
+      # 7. Start the API in the background
       # This step starts the Node.js API and waits for it to be ready.
       - name: Start API
         working-directory: ./us-power-plants
@@ -82,7 +94,7 @@ jobs:
             exit 1
           fi
 
-      # 6. Setup Java for tests
+      # 8. Setup Java for tests
       # This is required for running your Maven-based API tests.
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -90,14 +102,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Run API tests
+      # 9. Run API tests
       # Navigate to the root of the test project (where the workflow is).
       - name: Run tests
         working-directory: . # The test project is now at the root of the workspace
         run: |
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      # 8. Cleanup: Stop the API process
+      # 10. Cleanup: Stop the API process
       # This step ensures the API process is terminated, even if tests fail.
       - name: Stop API
         if: always() # Always run this step
