@@ -15,26 +15,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout the repository
-      - name: Checkout code
+      # 1. Checkout API project
+      - name: Checkout API code
         uses: actions/checkout@v4
+        with:
+          repository: Abdel-AzeemHU/us-power-plants-js
+          path: api-project
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Setup Node.js
-      - name: Setup Node
+      # 2. Setup Node.js for API
+      - name: Setup Node for API
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          working-directory: ./api-project
 
-      # 3. Install dependencies
-      - name: Install dependencies
+      # 3. Install API dependencies
+      - name: Install API dependencies
+        working-directory: ./api-project
         run: |
           npm install -g yarn
           yarn install --frozen-lockfile
 
-      # 4. Start the API (in the correct directory)
+      # 4. Start the API
       - name: Start API
+        working-directory: ./api-project/opt/api  # Adjust to your API directory
         run: |
-          cd opt/api  # CHANGE THIS to your actual API directory
           make api-start > api.log 2>&1 &
           echo $! > api.pid
           
@@ -56,17 +62,34 @@ jobs:
             exit 1
           fi
 
-      # 5. Run your API tests
-      - name: Run tests
-        run: |
-          # Your test command here
-          echo "Running tests..."
+      # 5. Checkout Test project
+      - name: Checkout Test code
+        uses: actions/checkout@v4
+        with:
+          path: test-project
 
-      # 6. Cleanup (always runs)
+      # 6. Setup Test environment (Java/Maven if needed)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 7. Run your API tests
+      - name: Run tests
+        working-directory: ./test-project
+        run: |
+          # Example: mvn test
+          # Or your actual test command
+          echo "Running tests against http://localhost:${{ env.API_PORT }}"
+          mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+
+      # 8. Cleanup (always runs)
       - name: Stop API
         if: always()
+        working-directory: ./api-project/opt/api  # Same as Start API step
         run: |
-          if [ -f opt/api/api.pid ]; then  # CHANGE THIS to match your API directory
-            kill -9 $(cat opt/api/api.pid) || true
-            rm opt/api/api.pid
+          if [ -f api.pid ]; then
+            kill -9 $(cat api.pid) || true
+            rm api.pid
           fi
