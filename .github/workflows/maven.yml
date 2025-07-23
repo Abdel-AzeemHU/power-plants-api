@@ -15,96 +15,75 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout the API project first (us-power-plants-js)
-      # This repository contains the Node.js API code.
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
           repository: Abdel-AzeemHU/us-power-plants-js
-          path: us-power-plants # Checks out into a directory named 'us-power-plants'
-          token: ${{ secrets.GITHUB_TOKEN }}
+          path: us-power-plants
 
-      # 2. Setup Node.js with caching
-      # We set the working-directory to 'us-power-plants' so that 'yarn.lock'
-      # is correctly found for caching within that directory.
+      - name: Checkout test code
+        uses: actions/checkout@v4
+        with:
+          path: power-plants-api
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: 'yarn.lock' # Now relative to the working-directory
-        working-directory: './us-power-plants' # Explicitly set working directory for this step
 
-      # 3. Checkout the Test project (power-plants-api)
-      # This repository contains your workflow file and the Java tests.
-      - name: Checkout Test code
-        uses: actions/checkout@v4
-        with:
-          path: power-plants-api # Checks out into a directory named 'power-plants-api'
+      - name: Install Yarn
+        run: npm install -g yarn@1.22.22
 
-      # 4. Install API dependencies
-      # Run yarn install within the API project directory.
       - name: Install API dependencies
         working-directory: ./us-power-plants
-        run: |
-          npm install -g yarn@1.22.22 # Ensure yarn is available
-          yarn install --frozen-lockfile
-          yarn add nodemon ts-node --dev
+        run: yarn install --frozen-lockfile
 
-      # 5. Start the API in the background
-      # This step starts the Node.js API and waits for it to be ready.
-      - name: Start API
+      - name: Start API using make
         working-directory: ./us-power-plants
         run: |
-          # Start nodemon in the background, redirecting output to api.log
-          nohup yarn nodemon app.ts > api.log 2>&1 &
-          # Store the process ID for later cleanup
+          make api-start > api.log 2>&1 &
           echo $! > api.pid
-          
-          echo "Waiting for API startup..."
-          # Loop to check if the API is up and running
+
+          echo "Waiting for API to start..."
           for i in {1..30}; do
-            # Check if the API docs endpoint is reachable and if the log indicates it's running
             if curl -f http://localhost:${{ env.API_PORT }}/api-docs && \
                grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
-              echo "API ready!"
+              echo "API is up!"
               break
             fi
             sleep 2
             echo "Waiting... ($i/30)"
           done
-          
-          # Final check: if API is not up, print logs and exit with error
+
           if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
-            echo "API failed to start. Logs:"
+            echo "API failed to start. Here's the log:"
             cat api.log
             exit 1
           fi
 
-      # 6. Setup Java for tests
-      # This is required for running your Maven-based API tests.
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 7. Run API tests
-      # Navigate to the test project directory and execute Maven tests.
-      - name: Run tests
+      - name: Run API tests
         working-directory: ./power-plants-api
-        run: |
-          mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+        run: mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      # 8. Cleanup: Stop the API process
-      # This step ensures the API process is terminated, even if tests fail.
+      - name: Upload API logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-logs
+          path: ./us-power-plants/api.log
+
       - name: Stop API
-        if: always() # Always run this step
+        if: always()
         working-directory: ./us-power-plants
         run: |
           if [ -f api.pid ]; then
-            kill -9 $(cat api.pid) || true # Kill by PID if file exists
+            kill -9 $(cat api.pid) || true
             rm api.pid
           fi
-          # Fallback to kill any remaining nodemon processes
-          pkill -f "[n]odemon app.ts" || true
+          pkill -f "[n]odemon" || true
