@@ -15,42 +15,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout API repo
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
           repository: Abdel-AzeemHU/us-power-plants-js
-          path: us-power-plants
-          token: ${{ secrets.GITHUB_TOKEN }}
+          path: us-power-plants   # 👈 FIXED
 
-      # 2. Checkout test project (current repo)
       - name: Checkout test code
         uses: actions/checkout@v4
         with:
           path: power-plants-api
 
-      # 3. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 4. Install Yarn globally
       - name: Install Yarn
         run: npm install -g yarn@1.22.22
 
-      # 5. Install API dependencies
       - name: Install API dependencies
-        working-directory: ./us-power-plants
-        run: |
-          yarn install --frozen-lockfile
-          yarn add nodemon ts-node --dev
+        working-directory: ./us-power-plants   # 👈 FIXED
+        run: yarn install --frozen-lockfile
 
-      # 6. Start the API
-      - name: Start API
-        working-directory: ./us-power-plants
+      - name: Start API using make
+        working-directory: ./us-power-plants   # 👈 FIXED
         run: |
-          nohup yarn nodemon app.ts > api.log 2>&1 &
+          nohup make api-start > api.log 2>&1 &
           echo $! > api.pid
 
           echo "Waiting for API to start..."
@@ -70,34 +61,29 @@ jobs:
             exit 1
           fi
 
-      # 7. Setup Java for API tests
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 8. Run the Java API tests
       - name: Run API tests
         working-directory: ./power-plants-api
-        run: |
-          mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+        run: mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
-      # 9. Upload API log on failure (optional)
       - name: Upload API logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: api-logs
-          path: ./us-power-plants/api.log
+          path: ./us-power-plants/api.log  # 👈 FIXED
 
-      # 10. Stop the API
       - name: Stop API
         if: always()
-        working-directory: ./us-power-plants
+        working-directory: ./us-power-plants  # 👈 FIXED
         run: |
           if [ -f api.pid ]; then
             kill -9 $(cat api.pid) || true
             rm api.pid
           fi
-          pkill -f "[n]odemon app.ts" || true
+          pkill -f "[n]odemon" || true
