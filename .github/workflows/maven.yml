@@ -15,8 +15,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout the API project first (us-power-plants-js)
-      # This repository contains the Node.js API code.
+      # 1. Checkout the Test project (power-plants-api)
+      # This is the repository where this workflow file resides.
+      # By default, it will be checked out to the root of the runner's workspace.
+      - name: Checkout Test code (main repo)
+        uses: actions/checkout@v4
+
+      # 2. Checkout the API project (us-power-plants-js)
+      # This repository contains the Node.js API code and is checked out
+      # into a specific subdirectory named 'us-power-plants'.
       - name: Checkout API code
         uses: actions/checkout@v4
         with:
@@ -24,8 +31,9 @@ jobs:
           path: us-power-plants # Checks out into a directory named 'us-power-plants'
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Setup Node.js with caching
-      # The cache-dependency-path is specified relative to the repository's root.
+      # 3. Setup Node.js with caching
+      # This step is now placed AFTER the API code checkout to ensure
+      # 'us-power-plants/yarn.lock' is available for caching.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,13 +42,6 @@ jobs:
           # The path to yarn.lock is relative to the runner's workspace root,
           # where 'us-power-plants' is the directory created by the checkout action.
           cache-dependency-path: 'us-power-plants/yarn.lock'
-
-      # 3. Checkout the Test project (power-plants-api)
-      # This repository contains your workflow file and the Java tests.
-      - name: Checkout Test code
-        uses: actions/checkout@v4
-        with:
-          path: power-plants-api # Checks out into a directory named 'power-plants-api'
 
       # 4. Install API dependencies
       # Run yarn install within the API project directory.
@@ -90,9 +91,9 @@ jobs:
           java-version: '17'
 
       # 7. Run API tests
-      # Navigate to the test project directory and execute Maven tests.
+      # Navigate to the root of the test project (where the workflow is).
       - name: Run tests
-        working-directory: ./power-plants-api
+        working-directory: . # The test project is now at the root of the workspace
         run: |
           mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
 
