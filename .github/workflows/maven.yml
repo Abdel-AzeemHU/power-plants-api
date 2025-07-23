@@ -1,48 +1,91 @@
-name: CI
+name: API Test Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  API_PORT: 9000
 
 jobs:
-  build-and-test:
+  test-api:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout API code
         uses: actions/checkout@v4
         with:
           repository: Abdel-AzeemHU/us-power-plants-js
           path: us-power-plants
 
-      - name: Set up Node.js
+      - name: Checkout test code
+        uses: actions/checkout@v4
+        with:
+          path: power-plants-api
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '18'
           cache: 'yarn'
+          cache-dependency-path: us-power-plants/yarn.lock  # <-- fix here
 
-      - name: Install dependencies
+      - name: Install Yarn
+        run: npm install -g yarn@1.22.22
+
+      - name: Install API dependencies
         working-directory: ./us-power-plants
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
-      - name: Start API in background
+      - name: Start API using make
         working-directory: ./us-power-plants
-        run: nohup make api-start > api.log 2>&1 &
-
-      - name: Wait for API to be ready
         run: |
-          echo "Waiting for API..."
+          make api-start > api.log 2>&1 &
+          echo $! > api.pid
+
+          echo "Waiting for API to start..."
           for i in {1..30}; do
-            if curl -s http://localhost:3000/health; then
+            if curl -f http://localhost:${{ env.API_PORT }}/api-docs && \
+               grep -q "UP and running on 0.0.0.0:${{ env.API_PORT }}" api.log; then
               echo "API is up!"
               break
             fi
             sleep 2
+            echo "Waiting... ($i/30)"
           done
 
-      # Add your tests or additional steps below
-      - name: Run tests
+          if ! curl -f http://localhost:${{ env.API_PORT }}/api-docs; then
+            echo "API failed to start. Here's the log:"
+            cat api.log
+            exit 1
+          fi
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Run API tests
+        working-directory: ./power-plants-api
+        run: mvn test -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+
+      - name: Upload API logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-logs
+          path: ./us-power-plants/api.log
+
+      - name: Stop API
+        if: always()
         working-directory: ./us-power-plants
-        run: echo "Test logic here"
+        run: |
+          if [ -f api.pid ]; then
+            kill -9 $(cat api.pid) || true
+            rm api.pid
+          fi
+          pkill -f "[n]odemon" || true
