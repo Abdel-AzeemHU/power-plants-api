@@ -15,23 +15,31 @@ env:
   TESTER: 'Abdelazeem Hussein'
   NODE_VERSION: '18'
   JAVA_VERSION: '17'
+  API_PORT: '9000'
 
 jobs:
   api-automation-tests:
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout API Test Repository
-        uses: actions/checkout@v4
-        with:
-          path: api-tests
 
-      - name: Checkout Power Plants Application
+    services:
+      # Start a PostgreSQL container for testing
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: powerplants
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          repository: Abdel-AzeemHU/us-power-plants-js
-          path: power-plants-app
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,109 +51,94 @@ jobs:
           npm install -g yarn
           yarn --version
 
-      - name: Cache Node modules for Power Plants App
+      - name: Cache Node modules
         uses: actions/cache@v4
         with:
-          path: power-plants-app/node_modules
-          key: ${{ runner.os }}-yarn-${{ hashFiles('power-plants-app/yarn.lock') }}
+          path: node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
 
-      - name: Setup Java
+      - name: Install Dependencies
+        run: |
+          yarn install --frozen-lockfile
+          # Ensure ts-node and nodemon are available
+          yarn add ts-node nodemon --dev
+
+      - name: Setup Java (for API tests)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Install Make (if not available)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make
-
-      - name: Install Power Plants App Dependencies
-        working-directory: power-plants-app
-        run: |
-          yarn install --frozen-lockfile
-
       - name: Start Power Plants API
-        working-directory: power-plants-app
         run: |
-          # Check if nodemon is available
-          echo "Checking nodemon availability:"
-          which nodemon || echo "nodemon not found in PATH"
-          
-          # Check what's in the Makefile
-          echo "Contents of Makefile:"
-          cat Makefile | head -20
-          
-          # Start the API in the background using Makefile
-          echo "Starting API with make api-start..."
-          make api-start > api.log 2>&1 &
-          
-          # Store the PID for cleanup later
+          # Set up environment variables
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/powerplants" >> .env
+          echo "PORT=${{ env.API_PORT }}" >> .env
+          echo "NODE_ENV=test" >> .env
+
+          # Start the API in background
+          nohup yarn dev > api.log 2>&1 &
           echo $! > api.pid
-          
-          # Wait for the API to be ready
-          echo "Waiting for API to start..."
+
+          # Wait for API to start
+          echo "Waiting for API to start on port ${{ env.API_PORT }}..."
           timeout=60
           while [ $timeout -gt 0 ]; do
-            if curl -f http://localhost:9000/api-docs 2>/dev/null; then
+            if curl -f http://localhost:${{ env.API_PORT }}/api-docs 2>/dev/null; then
               echo "API is ready!"
               break
             fi
-            echo "API not ready yet, waiting..."
+            echo "Waiting for API to start..."
             sleep 2
             timeout=$((timeout-2))
           done
-          
+
           if [ $timeout -le 0 ]; then
             echo "API failed to start within timeout"
             echo "API logs:"
-            cat api.log || echo "No api.log file found"
+            cat api.log
             echo "Process list:"
-            ps aux | grep -E "(node|yarn|make)" || true
-            cat api.pid | xargs kill -9 2>/dev/null || true
+            ps aux
             exit 1
           fi
 
-      - name: Build Maven Test Project
-        working-directory: api-tests
+      - name: Run Database Migrations
         run: |
+          yarn db:migrate
+
+      - name: Checkout API Tests (if in separate repo)
+        if: false # Set to true if tests are in separate repo
+        uses: actions/checkout@v4
+        with:
+          repository: your-org/api-tests-repo
+          path: api-tests
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Run API Tests
+        working-directory: ./ # Change to api-tests if using separate repo
+        run: |
+          # Build test project (if Maven)
           mvn clean install -DskipTests
 
-      - name: Run API Tests
-        working-directory: api-tests
-        run: |
-          # Start timing
-          start_time=$(date +%s)
-          
-          # Run tests
-          mvn clean test -Dsurefire.suiteXmlFiles=testng.xml \
-            -Dallure.results.directory=${{ env.ALLURE_RESULTS_DIR }}
-          
-          # Calculate duration
-          end_time=$(date +%s)
-          duration=$((end_time - start_time))
-          hours=$((duration / 3600))
-          minutes=$(((duration % 3600) / 60))
-          seconds=$((duration % 60))
-          formatted_duration=$(printf '%02dh:%02dm:%02ds' $hours $minutes $seconds)
-          
-          # Create reports directory and summary
+          # Run API tests
+          mvn test -Dsurefire.suiteXmlFiles=testng.xml \
+            -Dallure.results.directory=${{ env.ALLURE_RESULTS_DIR }} \
+            -Dapi.base.url=http://localhost:${{ env.API_PORT }}
+
+          # Generate test summary
           mkdir -p reports
-          echo "duration=$formatted_duration" >> reports/test_summary.txt
-          echo "environment=${{ env.ENVIRONMENT }}" >> reports/test_summary.txt
-          echo "tester=${{ env.TESTER }}" >> reports/test_summary.txt
-          echo "timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> reports/test_summary.txt
-          
-          echo "TEST_DURATION=$formatted_duration" >> $GITHUB_ENV
+          echo "Test Suite: ${{ env.TEST_SUITE }}" > reports/summary.txt
+          echo "Environment: ${{ env.ENVIRONMENT }}" >> reports/summary.txt
+          echo "Tester: ${{ env.TESTER }}" >> reports/summary.txt
+          echo "API Base URL: http://localhost:${{ env.API_PORT }}" >> reports/summary.txt
 
       - name: Generate Allure Report
-        working-directory: api-tests
         if: always()
         run: |
-          # Download and setup Allure
-          curl -o allure-2.30.0.tgz -Ls https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
+          # Setup Allure
+          curl -Lo allure-2.30.0.tgz https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
           tar -zxvf allure-2.30.0.tgz
           sudo mv allure-2.30.0 /opt/allure
           sudo ln -s /opt/allure/bin/allure /usr/bin/allure
@@ -158,80 +151,32 @@ jobs:
         if: always()
         with:
           name: allure-report
-          path: api-tests/${{ env.ALLURE_REPORT_DIR }}
+          path: ${{ env.ALLURE_REPORT_DIR }}
           retention-days: 30
 
-      - name: Upload Extent Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: extent-report
-          path: api-tests/Extent.html
-          retention-days: 30
-
-      - name: Upload Test Summary
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-summary
-          path: api-tests/reports/test_summary.txt
-          retention-days: 30
-
-      - name: Generate Final Report
-        working-directory: api-tests
+      - name: Stop Power Plants API
         if: always()
         run: |
-          # Make script executable if it exists
-          if [ -f "generate_report.sh" ]; then
-            chmod +x ./generate_report.sh
-            ./generate_report.sh "${{ env.TEST_SUITE }}" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          else
-            echo "generate_report.sh not found, skipping final report generation"
+          if [ -f api.pid ]; then
+            kill -9 $(cat api.pid) || true
+            rm api.pid
           fi
-
-      - name: Upload Final Report
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('api-tests/reports/final_report.html') != ''
-        with:
-          name: final-report
-          path: api-tests/reports/final_report.html
-          retention-days: 30
+          pkill -f "node.*app\.ts" || true
 
       - name: Comment Test Results on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const testDuration = process.env.TEST_DURATION || 'Unknown';
-            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            
-            const comment = `## 🧪 API Test Results
-            
-            **Test Suite:** ${{ env.TEST_SUITE }}
-            **Duration:** ${testDuration}
-            **Environment:** ${{ env.ENVIRONMENT }}
-            **Tester:** ${{ env.TESTER }}
-            
-            📊 [View Full Report](${runUrl})
-            📋 [Download Artifacts](${runUrl})
-            
-            > Automated API tests completed for commit ${{ github.sha }}`;
+            const fs = require('fs');
+            let summary = 'Test summary not available';
+            try {
+              summary = fs.readFileSync('reports/summary.txt', 'utf8');
+            } catch (e) {}
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              body: `## API Test Results\n\n${summary}\n\n[View Workflow Run](${github.server_url}/${github.repository}/actions/runs/${github.run_id})`
             });
-
-      - name: Stop Power Plants API
-        if: always()
-        working-directory: power-plants-app
-        run: |
-          # Kill the API process using the stored PID
-          if [ -f api.pid ]; then
-            cat api.pid | xargs kill -9 2>/dev/null || true
-            rm api.pid
-          fi
-          # Also kill any remaining processes that might be related
-          pkill -f "make api-start" || true
