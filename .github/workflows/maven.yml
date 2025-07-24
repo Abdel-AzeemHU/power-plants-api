@@ -46,8 +46,9 @@ jobs:
       - name: Install Dependencies
         working-directory: power-plants-app
         run: |
-          yarn install
-          # Install required global packages for the API
+          # Install dependencies in the api subdirectory where they're actually needed
+          cd api && yarn install
+          # Install global packages
           yarn global add nodemon ts-node typescript
 
       - name: Setup Java
@@ -70,7 +71,6 @@ jobs:
           # Start the API in the background using Makefile
           echo "Starting API with make api-start..."
           make api-start > api.log 2>&1 &
-          
           # Store the PID for cleanup later
           echo $! > api.pid
           
@@ -91,8 +91,6 @@ jobs:
             echo "API failed to start within timeout"
             echo "API logs:"
             cat api.log || echo "No api.log file found"
-            echo "Process list:"
-            ps aux | grep -E "(node|yarn|make)" || true
             cat api.pid | xargs kill -9 2>/dev/null || true
             exit 1
           fi
